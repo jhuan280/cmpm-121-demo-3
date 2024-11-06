@@ -83,11 +83,3 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
-
-/* Click me button */
-.message-button {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}

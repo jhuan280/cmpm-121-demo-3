@@ -111,7 +111,7 @@ function updatePopup(
   popupContent.innerHTML = `
     <p>Cache spot: (${cell.i}, ${cell.j})</p>
     <p>Coins: ${coinOffering}</p>
-    <p>Coin IDs: ${coinIds.join(", ")}</p>
+    <p>Coin IDs:<br>${coinIds.join("<br>")}</p> 
     <button id="collect">Collect</button>
     <button id="deposit">Deposit</button>
   `;
@@ -165,7 +165,7 @@ for (
     // Determine if a cache should be placed
     if (nextRandom() < CACHE_SPAWN_PROBABILITY) {
       // Generate a deterministic amount of coins for this cache
-      const coinOffering = Math.floor(nextRandom() * 10 + 1); // Use const instead of let
+      const coinOffering = Math.floor(nextRandom() * 10 + 1);
 
       // Use the cell factory to manage game cells
       const cell = cellFactory.getCell(
@@ -176,7 +176,7 @@ for (
       // Generate unique IDs for the coins
       const coinIds = Array.from(
         { length: coinOffering },
-        () => `${cell.i},${cell.j}, serial: ${cell.generateSerial()}`,
+        () => `${cell.i},${cell.j}, serial#: ${cell.generateSerial()}`,
       );
 
       // Place a marker (or cache) at the grid cell using the custom icon

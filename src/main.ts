@@ -1,5 +1,5 @@
 // @deno-types="npm:@types/leaflet@^1.9.14"
-import leaflet, { Marker } from "leaflet";
+import leaflet from "leaflet"; // Removed { Marker } from imports
 
 // Style sheets
 import "leaflet/dist/leaflet.css";
@@ -15,7 +15,7 @@ function seededRandom(seed: number) {
 }
 
 // State for generating deterministic random numbers
-let seedValue = 1234; // Initialize with a fixed seed
+let seedValue = 1234;
 
 function nextRandom() {
   seedValue += 1;
@@ -25,46 +25,38 @@ function nextRandom() {
 // Player's collected coins
 let playerCoins = 0;
 
-// Location of our classroom (as identified on Google Maps)
+// Location of our classroom
 const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
 
-// Tunable gameplay parameters
+// Gameplay parameters
 const GAMEPLAY_ZOOM_LEVEL = 19;
 const TILE_DEGREES = 1e-4;
 const NEIGHBORHOOD_SIZE = 8;
 const CACHE_SPAWN_PROBABILITY = 0.1;
 
-// Flyweight and FlyweightFactory
-
-// Define a Flyweight class for the game cell grid
-class GameCell {
-  private serialCounter = 0; // Track serial numbers
-
-  constructor(public i: number, public j: number) {}
-
-  // Generate a unique serial number for each coin in this cell
-  generateSerial() {
-    return this.serialCounter++;
-  }
+// Interface for GameCell
+interface GameCell {
+  i: number;
+  j: number;
+  serialCounter: number;
 }
 
-class CellFactory {
-  private cells: Map<string, GameCell> = new Map();
+// Function to manage the creation and storage of game cells
+function cellFactory() {
+  const cells: Record<string, GameCell> = {};
 
-  // Method to get or create a Flyweight for game cells
-  getCell(i: number, j: number): GameCell {
+  return function getCell(i: number, j: number): GameCell {
     const key = `${i},${j}`;
-    if (!this.cells.has(key)) {
-      this.cells.set(key, new GameCell(i, j));
+    if (!cells[key]) {
+      cells[key] = { i, j, serialCounter: 0 };
     }
-    return this.cells.get(key) as GameCell;
-  }
+    return cells[key];
+  };
 }
 
-// Create the cell factory
-const cellFactory = new CellFactory();
+const getCell = cellFactory();
 
-// Create the map (element with id "map" is defined in index.html)
+// Create the map
 const map = leaflet.map(document.getElementById("map")!, {
   center: OAKES_CLASSROOM,
   zoom: GAMEPLAY_ZOOM_LEVEL,
@@ -88,25 +80,26 @@ const playerMarker = leaflet.marker(OAKES_CLASSROOM);
 playerMarker.bindTooltip("Player");
 playerMarker.addTo(map);
 
-// Create a custom large icon for cache spots using emoji or local image
+// Custom icon for cache spots
 const cacheIcon = new leaflet.DivIcon({
   className: "custom-cache-icon",
-  html: "🎁", // Replace with an emoji or use an image URL
-  iconSize: [50, 50], // Larger size for more visibility
-  iconAnchor: [25, 25], // Center position the icon
+  html: "🎁",
+  iconSize: [50, 50],
+  iconAnchor: [25, 25],
 });
 
 // Convert player's location to grid
 const playerRow = Math.round(OAKES_CLASSROOM.lat / TILE_DEGREES);
 const playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
 
-// Function to update popup content
-function updatePopup(
-  cacheMarker: Marker,
-  coinOffering: number,
-  coinIds: string[],
+// Function to manage popups with closure for coinOffering
+function createPopupContent(
   cell: GameCell,
+  initialCoinOffering: number,
+  coinIds: string[],
 ) {
+  let coinOffering = initialCoinOffering; // Use closure to preserve state
+
   const popupContent = document.createElement("div");
   popupContent.innerHTML = `
     <p>Cache spot: (${cell.i}, ${cell.j})</p>
@@ -116,36 +109,40 @@ function updatePopup(
     <button id="deposit">Deposit</button>
   `;
 
+  // Update popup content to reflect current state
+  const refreshContent = () => {
+    popupContent.querySelector("p:nth-child(2)")!.textContent =
+      `Coins: ${coinOffering}`;
+  };
+
   popupContent.querySelector("#collect")?.addEventListener(
     "click",
-    function () {
+    () => {
       if (coinOffering > 0) {
         playerCoins += coinOffering;
         coinOffering = 0;
         console.log("Collected coins. Player now has:", playerCoins);
-        // Refresh content and keep popup open
-        updatePopup(cacheMarker, coinOffering, coinIds, cell);
+        refreshContent();
       }
     },
   );
 
   popupContent.querySelector("#deposit")?.addEventListener(
     "click",
-    function () {
+    () => {
       if (playerCoins > 0) {
         coinOffering += playerCoins;
         playerCoins = 0;
         console.log("Deposited coins. Cache now has:", coinOffering);
-        // Refresh content and keep popup open
-        updatePopup(cacheMarker, coinOffering, coinIds, cell);
+        refreshContent();
       }
     },
   );
 
-  cacheMarker.bindPopup(popupContent, { closeOnClick: false }).openPopup();
+  return popupContent;
 }
 
-// Determine the Neighborhood
+// Determine the neighborhood
 for (
   let rowOffset = -NEIGHBORHOOD_SIZE;
   rowOffset <= NEIGHBORHOOD_SIZE;
@@ -159,32 +156,31 @@ for (
     const newRow = playerRow + rowOffset;
     const newCol = playerCol + colOffset;
 
-    // Calculate the grid cell's geographical location
     const gridCenterLat = newRow * TILE_DEGREES;
     const gridCenterLng = newCol * TILE_DEGREES;
     const gridCenter = leaflet.latLng(gridCenterLat, gridCenterLng);
 
-    // Determine if a cache should be placed
     if (nextRandom() < CACHE_SPAWN_PROBABILITY) {
-      // Generate a deterministic amount of coins for this cache
-      const coinOffering = Math.floor(nextRandom() * 10 + 1);
+      const initialCoinOffering = Math.floor(nextRandom() * 10 + 1);
 
-      // Use the cell factory to manage game cells
-      const cell = cellFactory.getCell(
+      const cell = getCell(
         Math.floor(gridCenterLat * 1e4),
         Math.floor(gridCenterLng * 1e4),
       );
 
-      // Generate unique IDs for the coins
       const coinIds = Array.from(
-        { length: coinOffering },
-        () => `${cell.i}:${cell.j}, serial# ${cell.generateSerial()}`,
+        { length: initialCoinOffering },
+        () => `${cell.i}:${cell.j}, serial# ${cell.serialCounter++}`,
       );
 
-      // Place a marker (or cache) at the grid cell using the custom icon
       const cacheMarker = leaflet.marker(gridCenter, { icon: cacheIcon });
 
-      updatePopup(cacheMarker, coinOffering, coinIds, cell); // Call function with cache info
+      const update = () => {
+        const content = createPopupContent(cell, initialCoinOffering, coinIds);
+        cacheMarker.bindPopup(content, { closeOnClick: false }).openPopup();
+      };
+
+      update(); // Initialize popup
       cacheMarker.addTo(map);
     }
   }

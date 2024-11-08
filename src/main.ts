@@ -38,7 +38,14 @@ const CACHE_SPAWN_PROBABILITY = 0.1;
 
 // Define a Flyweight class for the game cell grid
 class GameCell {
+  private serialCounter = 0; // Track serial numbers
+
   constructor(public i: number, public j: number) {}
+
+  // Generate a unique serial number for each coin in this cell
+  generateSerial() {
+    return this.serialCounter++;
+  }
 }
 
 class CellFactory {
@@ -97,12 +104,14 @@ const playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
 function updatePopup(
   cacheMarker: Marker,
   coinOffering: number,
+  coinIds: string[],
   cell: GameCell,
 ) {
   const popupContent = document.createElement("div");
   popupContent.innerHTML = `
     <p>Cache spot: (${cell.i}, ${cell.j})</p>
     <p>Coins: ${coinOffering}</p>
+    <p>Coin IDs: ${coinIds.join(", ")}</p>
     <button id="collect">Collect</button>
     <button id="deposit">Deposit</button>
   `;
@@ -114,7 +123,7 @@ function updatePopup(
         playerCoins += coinOffering;
         coinOffering = 0;
         console.log("Collected coins. Player now has:", playerCoins);
-        updatePopup(cacheMarker, coinOffering, cell); // Refresh popup content
+        updatePopup(cacheMarker, coinOffering, coinIds, cell); // Refresh popup content
       }
     },
   );
@@ -126,7 +135,7 @@ function updatePopup(
         coinOffering += playerCoins;
         playerCoins = 0;
         console.log("Deposited coins. Cache now has:", coinOffering);
-        updatePopup(cacheMarker, coinOffering, cell); // Refresh popup content
+        updatePopup(cacheMarker, coinOffering, coinIds, cell); // Refresh popup content
       }
     },
   );
@@ -158,17 +167,22 @@ for (
       // Generate a deterministic amount of coins for this cache
       const coinOffering = Math.floor(nextRandom() * 10 + 1); // Use const instead of let
 
-      // Compute grid coordinates based on a global coordinate system
-      const i = Math.floor(gridCenterLat * 1e4);
-      const j = Math.floor(gridCenterLng * 1e4);
-
       // Use the cell factory to manage game cells
-      const cell = cellFactory.getCell(i, j);
+      const cell = cellFactory.getCell(
+        Math.floor(gridCenterLat * 1e4),
+        Math.floor(gridCenterLng * 1e4),
+      );
+
+      // Generate unique IDs for the coins
+      const coinIds = Array.from(
+        { length: coinOffering },
+        () => `${cell.i},${cell.j}, serial: ${cell.generateSerial()}`,
+      );
 
       // Place a marker (or cache) at the grid cell using the custom icon
       const cacheMarker = leaflet.marker(gridCenter, { icon: cacheIcon });
 
-      updatePopup(cacheMarker, coinOffering, cell); // Call function with cache info
+      updatePopup(cacheMarker, coinOffering, coinIds, cell); // Call function with cache info
       cacheMarker.addTo(map);
     }
   }

@@ -123,7 +123,8 @@ function updatePopup(
         playerCoins += coinOffering;
         coinOffering = 0;
         console.log("Collected coins. Player now has:", playerCoins);
-        updatePopup(cacheMarker, coinOffering, coinIds, cell); // Refresh popup content
+        // Refresh content and keep popup open
+        updatePopup(cacheMarker, coinOffering, coinIds, cell);
       }
     },
   );
@@ -135,12 +136,13 @@ function updatePopup(
         coinOffering += playerCoins;
         playerCoins = 0;
         console.log("Deposited coins. Cache now has:", coinOffering);
-        updatePopup(cacheMarker, coinOffering, coinIds, cell); // Refresh popup content
+        // Refresh content and keep popup open
+        updatePopup(cacheMarker, coinOffering, coinIds, cell);
       }
     },
   );
 
-  cacheMarker.bindPopup(popupContent).openPopup();
+  cacheMarker.bindPopup(popupContent, { closeOnClick: false }).openPopup();
 }
 
 // Determine the Neighborhood

@@ -176,7 +176,7 @@ for (
       // Generate unique IDs for the coins
       const coinIds = Array.from(
         { length: coinOffering },
-        () => `${cell.i},${cell.j}, serial#: ${cell.generateSerial()}`,
+        () => `${cell.i}:${cell.j}, serial# ${cell.generateSerial()}`,
       );
 
       // Place a marker (or cache) at the grid cell using the custom icon

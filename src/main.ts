@@ -71,10 +71,16 @@ const playerRow = Math.round(OAKES_CLASSROOM.lat / TILE_DEGREES);
 const playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
 
 // Function to update popup content
-function updatePopup(cacheMarker: Marker, coinOffering: number) {
+function updatePopup(
+  cacheMarker: Marker,
+  coinOffering: number,
+  i: number,
+  j: number,
+) {
   const popupContent = document.createElement("div");
   popupContent.innerHTML = `
     <p>Cache spot! Coins: ${coinOffering}</p>
+    <p>Grid Coordinates: {i: ${i}, j: ${j}}</p>
     <button id="collect">Collect</button>
     <button id="deposit">Deposit</button>
   `;
@@ -86,7 +92,7 @@ function updatePopup(cacheMarker: Marker, coinOffering: number) {
         playerCoins += coinOffering;
         coinOffering = 0;
         console.log("Collected coins. Player now has:", playerCoins);
-        updatePopup(cacheMarker, coinOffering); // Refresh popup content
+        updatePopup(cacheMarker, coinOffering, i, j); // Refresh popup content
       }
     },
   );
@@ -98,7 +104,7 @@ function updatePopup(cacheMarker: Marker, coinOffering: number) {
         coinOffering += playerCoins;
         playerCoins = 0;
         console.log("Deposited coins. Cache now has:", coinOffering);
-        updatePopup(cacheMarker, coinOffering); // Refresh popup content
+        updatePopup(cacheMarker, coinOffering, i, j); // Refresh popup content
       }
     },
   );
@@ -130,10 +136,14 @@ for (
       // Generate a deterministic amount of coins for this cache
       const coinOffering = Math.floor(nextRandom() * 10 + 1); // Use const instead of let
 
+      // Compute grid coordinates based on a global coordinate system
+      const i = Math.floor(gridCenterLat * 1e4);
+      const j = Math.floor(gridCenterLng * 1e4);
+
       // Place a marker (or cache) at the grid cell using the custom icon
       const cacheMarker = leaflet.marker(gridCenter, { icon: cacheIcon });
 
-      updatePopup(cacheMarker, coinOffering); // Call function with cache info
+      updatePopup(cacheMarker, coinOffering, i, j); // Call function with cache info
       cacheMarker.addTo(map);
     }
   }

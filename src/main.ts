@@ -79,8 +79,8 @@ function updatePopup(
 ) {
   const popupContent = document.createElement("div");
   popupContent.innerHTML = `
-    <p>Cache spot! Coins: ${coinOffering}</p>
-    <p>Grid Coordinates: {i: ${i}, j: ${j}}</p>
+    <p>Cache spot: (${i}, ${j})</p>
+    <p>Coins: ${coinOffering}</p>
     <button id="collect">Collect</button>
     <button id="deposit">Deposit</button>
   `;

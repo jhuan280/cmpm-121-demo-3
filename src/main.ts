@@ -22,8 +22,8 @@ function nextRandom() {
   return seededRandom(seedValue);
 }
 
-// Player's collected coins (IDs)
-const playerCollectedCoins: string[] = [];
+// Player's collected coins as unique serial numbers
+let playerCoins: string[] = [];
 
 // Location of our classroom
 const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
@@ -44,7 +44,6 @@ interface GameCell {
 // Function to manage the creation and storage of game cells
 function cellFactory() {
   const cells: Record<string, GameCell> = {};
-
   return function getCell(i: number, j: number): GameCell {
     const key = `${i},${j}`;
     if (!cells[key]) {
@@ -76,9 +75,8 @@ leaflet
   .addTo(map);
 
 // Add a marker to represent the player
-const playerMarker = leaflet.marker(OAKES_CLASSROOM);
-playerMarker.bindTooltip("Player");
-playerMarker.addTo(map);
+const _playerMarker = leaflet.marker(OAKES_CLASSROOM).bindTooltip("Player")
+  .addTo(map);
 
 // Custom icon for cache spots
 const cacheIcon = new leaflet.DivIcon({
@@ -92,52 +90,15 @@ const cacheIcon = new leaflet.DivIcon({
 const playerRow = Math.round(OAKES_CLASSROOM.lat / TILE_DEGREES);
 const playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
 
-// Function to update inventory display
-function updateInventoryDisplay() {
-  const inventoryList = document.getElementById("inventory-list")!;
-  inventoryList.innerHTML = playerCollectedCoins.map(
-    (coinId, index) => `
-    <li>
-      ${coinId}
-      <button id="deposit-${index}">Deposit</button>
-    </li>
-  `,
-  ).join("");
-
-  // Event listeners for depositing coins back into caches
-  playerCollectedCoins.slice().forEach((coinId, index) => {
-    document.getElementById(`deposit-${index}`)?.addEventListener(
-      "click",
-      () => {
-        const [i, j] = coinId.split(",")[0].split(":").map(Number);
-        const cell = getCell(i, j);
-        cell.serialCounter += 1; // Ensure the serial counter is unique
-        const updatedCoinId = `${i}:${j}, serial# ${cell.serialCounter}`;
-
-        // Find context and update popup
-        const gridKey = `${i},${j}`;
-        const markerContext = markersMap.get(gridKey);
-        if (markerContext) {
-          markerContext.coinIds.push(updatedCoinId);
-          markerContext.updatePopup();
-        }
-
-        playerCollectedCoins.splice(index, 1);
-        updateInventoryDisplay(); // Update the inventory display
-      },
-    );
-  });
-}
-
-// Function to manage popups with closure for coinOffering
+// Function to manage popups with individual coin collection
 function createPopupContent(
   cell: GameCell,
   coinIds: string[],
 ) {
-  const remainingCoinIds = [...coinIds]; // Clone array to manipulate
+  const remainingCoinIds = [...coinIds]; // Copy array to manipulate
   const popupContent = document.createElement("div");
 
-  const renderCoins = () => {
+  const refreshContent = () => {
     popupContent.innerHTML = `
       <p>Cache spot: (${cell.i}, ${cell.j})</p>
       <p>Cache Coins: ${remainingCoinIds.length}</p>
@@ -146,36 +107,49 @@ function createPopupContent(
       remainingCoinIds.map((coinId, index) => `
           <div>
             ${coinId}
-            <button id="collect-${index}">Collect</button>
+            <button id="collect-${cell.i}-${cell.j}-${index}">Collect</button>
           </div>`).join("")
-    } 
+    }
       </div>
+      <button id="deposit">Deposit</button>
     `;
 
-    // Event listeners for collecting coins from cache
-    remainingCoinIds.slice().forEach((coinId, index) => {
-      popupContent.querySelector(`#collect-${index}`)?.addEventListener(
-        "click",
-        () => {
-          playerCollectedCoins.push(coinId);
-          console.log(`Collected: ${coinId}.`);
-          remainingCoinIds.splice(index, 1);
-          renderCoins(); // Re-render the coin list
-          updateInventoryDisplay(); // Update the inventory display
-        },
-      );
+    // Event listeners for collecting individual coins from cache
+    remainingCoinIds.forEach((coinId, index) => {
+      popupContent.querySelector(`#collect-${cell.i}-${cell.j}-${index}`)
+        ?.addEventListener(
+          "click",
+          () => {
+            playerCoins.push(coinId);
+            remainingCoinIds.splice(index, 1);
+            console.log(
+              `Collected: ${coinId}. Player now has ${playerCoins.length} coins.`,
+            );
+            refreshContent(); // Re-render the coin list
+          },
+        );
     });
+
+    // Event listener for depositing all collected coins back into the cache
+    popupContent.querySelector("#deposit")?.addEventListener(
+      "click",
+      () => {
+        if (playerCoins.length > 0) {
+          remainingCoinIds.push(...playerCoins);
+          console.log(
+            `Deposited coins. Cache now has: ${remainingCoinIds.length} coins`,
+          );
+          playerCoins = [];
+          refreshContent();
+        }
+      },
+    );
   };
 
-  renderCoins();
+  refreshContent(); // Initialize content
+
   return popupContent;
 }
-
-// Use a map to retain context between markers and their coin IDs
-const markersMap = new Map<
-  string,
-  { coinIds: string[]; updatePopup: () => void }
->();
 
 // Determine the neighborhood
 for (
@@ -210,17 +184,12 @@ for (
 
       const cacheMarker = leaflet.marker(gridCenter, { icon: cacheIcon });
 
-      const updatePopup = () => {
+      const update = () => {
         const content = createPopupContent(cell, coinIds);
         cacheMarker.bindPopup(content, { closeOnClick: false }).openPopup();
       };
 
-      markersMap.set(`${cell.i},${cell.j}`, {
-        coinIds,
-        updatePopup,
-      });
-
-      updatePopup(); // Initialize popup
+      update(); // Initialize popup
       cacheMarker.addTo(map);
     }
   }

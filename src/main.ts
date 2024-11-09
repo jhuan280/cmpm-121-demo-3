@@ -1,5 +1,5 @@
 // @deno-types="npm:@types/leaflet@^1.9.14"
-import leaflet from "leaflet"; // Removed { Marker } from imports
+import leaflet from "leaflet";
 
 // Style sheets
 import "leaflet/dist/leaflet.css";
@@ -22,8 +22,8 @@ function nextRandom() {
   return seededRandom(seedValue);
 }
 
-// Player's collected coins
-let playerCoins = 0;
+// Player's collected coins (IDs)
+const playerCollectedCoins: string[] = []; // Changed to const
 
 // Location of our classroom
 const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
@@ -92,53 +92,83 @@ const cacheIcon = new leaflet.DivIcon({
 const playerRow = Math.round(OAKES_CLASSROOM.lat / TILE_DEGREES);
 const playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
 
+// Function to update inventory display
+function updateInventoryDisplay() {
+  const inventoryList = document.getElementById("inventory-list")!;
+  inventoryList.innerHTML = playerCollectedCoins.map((coinId) =>
+    `<li>${coinId}</li>`
+  ).join("");
+}
+
 // Function to manage popups with closure for coinOffering
 function createPopupContent(
   cell: GameCell,
-  initialCoinOffering: number,
   coinIds: string[],
 ) {
-  let coinOffering = initialCoinOffering; // Use closure to preserve state
-
+  const remainingCoinIds = [...coinIds]; // Changed to const
   const popupContent = document.createElement("div");
-  popupContent.innerHTML = `
-    <p>Cache spot: (${cell.i}, ${cell.j})</p>
-    <p>Coins: ${coinOffering}</p>
-    <p>Coin IDs:<br>${coinIds.join("<br>")}</p> 
-    <button id="collect">Collect</button>
-    <button id="deposit">Deposit</button>
-  `;
 
-  // Update popup content to reflect current state
-  const refreshContent = () => {
-    popupContent.querySelector("p:nth-child(2)")!.textContent =
-      `Coins: ${coinOffering}`;
+  const renderCoins = () => {
+    popupContent.innerHTML = `
+      <p>Cache spot: (${cell.i}, ${cell.j})</p>
+      <p>Cache Coins: ${remainingCoinIds.length}</p>
+      <div id="coins-list">
+        ${
+      remainingCoinIds.map((coinId, index) => `
+          <div>
+            ${coinId}
+            <button id="collect-${index}">Collect</button>
+          </div>`).join("")
+    } 
+      </div>
+      <p>Player's Coins: ${playerCollectedCoins.length}</p>
+      <div id="player-coins-list">
+        ${
+      playerCollectedCoins.map(
+        (coinId, index) => `
+          <div>
+            ${coinId}
+            <button id="deposit-${index}">Deposit</button>
+          </div>`,
+      ).join("")
+    } 
+      </div>
+    `;
+
+    // Event listeners for collecting coins from cache
+    remainingCoinIds.forEach((coinId, index) => {
+      popupContent.querySelector(`#collect-${index}`)?.addEventListener(
+        "click",
+        () => {
+          playerCollectedCoins.push(coinId);
+          console.log(
+            `Collected: ${coinId}. Player's coins: ${playerCollectedCoins.length}`,
+          );
+          remainingCoinIds.splice(index, 1);
+          renderCoins(); // Re-render the coin list
+          updateInventoryDisplay(); // Update the inventory display
+        },
+      );
+    });
+
+    // Event listeners for depositing coins back into cache
+    playerCollectedCoins.forEach((coinId, index) => {
+      popupContent.querySelector(`#deposit-${index}`)?.addEventListener(
+        "click",
+        () => {
+          remainingCoinIds.push(coinId);
+          console.log(
+            `Deposited: ${coinId}. Cache coins: ${remainingCoinIds.length}`,
+          );
+          playerCollectedCoins.splice(index, 1);
+          renderCoins(); // Re-render the coin list
+          updateInventoryDisplay(); // Update the inventory display
+        },
+      );
+    });
   };
 
-  popupContent.querySelector("#collect")?.addEventListener(
-    "click",
-    () => {
-      if (coinOffering > 0) {
-        playerCoins += coinOffering;
-        coinOffering = 0;
-        console.log("Collected coins. Player now has:", playerCoins);
-        refreshContent();
-      }
-    },
-  );
-
-  popupContent.querySelector("#deposit")?.addEventListener(
-    "click",
-    () => {
-      if (playerCoins > 0) {
-        coinOffering += playerCoins;
-        playerCoins = 0;
-        console.log("Deposited coins. Cache now has:", coinOffering);
-        refreshContent();
-      }
-    },
-  );
-
+  renderCoins();
   return popupContent;
 }
 
@@ -176,7 +206,7 @@ for (
       const cacheMarker = leaflet.marker(gridCenter, { icon: cacheIcon });
 
       const update = () => {
-        const content = createPopupContent(cell, initialCoinOffering, coinIds);
+        const content = createPopupContent(cell, coinIds);
         cacheMarker.bindPopup(content, { closeOnClick: false }).openPopup();
       };
 

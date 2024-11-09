@@ -23,7 +23,7 @@ function nextRandom() {
 }
 
 // Player's collected coins (IDs)
-const playerCollectedCoins: string[] = []; // Changed to const
+const playerCollectedCoins: string[] = [];
 
 // Location of our classroom
 const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
@@ -95,8 +95,8 @@ const playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
 // Function to update inventory display
 function updateInventoryDisplay() {
   const inventoryList = document.getElementById("inventory-list")!;
-  inventoryList.innerHTML = playerCollectedCoins.map((coinId) =>
-    `<li>${coinId}</li>`
+  inventoryList.innerHTML = playerCollectedCoins.map(
+    (coinId) => `<li>${coinId}</li>`,
   ).join("");
 }
 
@@ -105,7 +105,7 @@ function createPopupContent(
   cell: GameCell,
   coinIds: string[],
 ) {
-  const remainingCoinIds = [...coinIds]; // Changed to const
+  const remainingCoinIds = [...coinIds]; // Clone array to manipulate
   const popupContent = document.createElement("div");
 
   const renderCoins = () => {
@@ -136,7 +136,7 @@ function createPopupContent(
     `;
 
     // Event listeners for collecting coins from cache
-    remainingCoinIds.forEach((coinId, index) => {
+    remainingCoinIds.slice().forEach((coinId, index) => {
       popupContent.querySelector(`#collect-${index}`)?.addEventListener(
         "click",
         () => {
@@ -152,7 +152,7 @@ function createPopupContent(
     });
 
     // Event listeners for depositing coins back into cache
-    playerCollectedCoins.forEach((coinId, index) => {
+    playerCollectedCoins.slice().forEach((coinId, index) => {
       popupContent.querySelector(`#deposit-${index}`)?.addEventListener(
         "click",
         () => {

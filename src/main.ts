@@ -7,6 +7,7 @@ import "./style.css";
 
 // Fix missing marker images
 import "./leafletWorkaround.ts";
+//-----import statements-----
 
 // Define the seeded random number generator
 function seededRandom(seed: number) {
@@ -34,26 +35,41 @@ const TILE_DEGREES = 1e-4;
 const NEIGHBORHOOD_SIZE = 8;
 const CACHE_SPAWN_PROBABILITY = 0.1;
 
-// Interface for GameCell
-interface GameCell {
+// Cache state management using memento
+const cacheStates: Record<string, string> = {};
+
+// Interface and class for CacheCell using the Memento pattern
+interface Memento<T> {
+  toMemento(): T;
+  fromMemento(memento: T): void;
+}
+
+class CacheCell implements Memento<string> {
   i: number;
   j: number;
-  serialCounter: number;
+  coinIds: string[];
+
+  constructor(i: number, j: number, coinIds: string[] = []) {
+    this.i = i;
+    this.j = j;
+    this.coinIds = [...coinIds];
+  }
+
+  toMemento(): string {
+    return JSON.stringify({ i: this.i, j: this.j, coinIds: this.coinIds });
+  }
+
+  fromMemento(memento: string) {
+    const parsed = JSON.parse(memento);
+    this.i = parsed.i;
+    this.j = parsed.j;
+    this.coinIds = parsed.coinIds;
+  }
 }
 
-// Function to manage the creation and storage of game cells
-function cellFactory() {
-  const cells: Record<string, GameCell> = {};
-  return function getCell(i: number, j: number): GameCell {
-    const key = `${i},${j}`;
-    if (!cells[key]) {
-      cells[key] = { i, j, serialCounter: 0 };
-    }
-    return cells[key];
-  };
-}
-
-const getCell = cellFactory();
+// Track player position in terms of grid coordinates
+let playerRow = Math.round(OAKES_CLASSROOM.lat / TILE_DEGREES);
+let playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
 
 // Create the map
 const map = leaflet.map(document.getElementById("map")!, {
@@ -75,7 +91,7 @@ leaflet
   .addTo(map);
 
 // Add a marker to represent the player
-const _playerMarker = leaflet.marker(OAKES_CLASSROOM).bindTooltip("Player")
+const playerMarker = leaflet.marker(OAKES_CLASSROOM).bindTooltip("Player")
   .addTo(map);
 
 // Custom icon for cache spots
@@ -86,16 +102,9 @@ const cacheIcon = new leaflet.DivIcon({
   iconAnchor: [25, 25],
 });
 
-// Convert player's location to grid
-const playerRow = Math.round(OAKES_CLASSROOM.lat / TILE_DEGREES);
-const playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
-
 // Function to manage popups with individual coin collection
-function createPopupContent(
-  cell: GameCell,
-  coinIds: string[],
-) {
-  const remainingCoinIds = [...coinIds]; // Copy array to manipulate
+function createPopupContent(cell: CacheCell) {
+  const remainingCoinIds = [...cell.coinIds];
   const popupContent = document.createElement("div");
 
   const refreshContent = () => {
@@ -114,7 +123,6 @@ function createPopupContent(
       <button id="deposit">Deposit</button>
     `;
 
-    // Event listeners for collecting individual coins from cache
     remainingCoinIds.forEach((coinId, index) => {
       popupContent.querySelector(`#collect-${cell.i}-${cell.j}-${index}`)
         ?.addEventListener(
@@ -130,7 +138,6 @@ function createPopupContent(
         );
     });
 
-    // Event listener for depositing all collected coins back into the cache
     popupContent.querySelector("#deposit")?.addEventListener(
       "click",
       () => {
@@ -146,51 +153,95 @@ function createPopupContent(
     );
   };
 
-  refreshContent(); // Initialize content
+  refreshContent();
 
   return popupContent;
 }
 
-// Determine the neighborhood
-for (
-  let rowOffset = -NEIGHBORHOOD_SIZE;
-  rowOffset <= NEIGHBORHOOD_SIZE;
-  rowOffset++
-) {
+function updateMapView() {
+  map.eachLayer((layer) => {
+    if (layer instanceof leaflet.Marker && layer !== playerMarker) {
+      map.removeLayer(layer);
+    }
+  });
+
   for (
-    let colOffset = -NEIGHBORHOOD_SIZE;
-    colOffset <= NEIGHBORHOOD_SIZE;
-    colOffset++
+    let rowOffset = -NEIGHBORHOOD_SIZE;
+    rowOffset <= NEIGHBORHOOD_SIZE;
+    rowOffset++
   ) {
-    const newRow = playerRow + rowOffset;
-    const newCol = playerCol + colOffset;
+    for (
+      let colOffset = -NEIGHBORHOOD_SIZE;
+      colOffset <= NEIGHBORHOOD_SIZE;
+      colOffset++
+    ) {
+      const newRow = playerRow + rowOffset;
+      const newCol = playerCol + colOffset;
 
-    const gridCenterLat = newRow * TILE_DEGREES;
-    const gridCenterLng = newCol * TILE_DEGREES;
-    const gridCenter = leaflet.latLng(gridCenterLat, gridCenterLng);
-
-    if (nextRandom() < CACHE_SPAWN_PROBABILITY) {
-      const initialCoinOffering = Math.floor(nextRandom() * 10 + 1);
-
-      const cell = getCell(
-        Math.floor(gridCenterLat * 1e4),
-        Math.floor(gridCenterLng * 1e4),
+      const cacheKey = `${newRow},${newCol}`;
+      const gridCenter = leaflet.latLng(
+        newRow * TILE_DEGREES,
+        newCol * TILE_DEGREES,
       );
 
-      const coinIds = Array.from(
-        { length: initialCoinOffering },
-        () => `${cell.i}:${cell.j}, serial# ${cell.serialCounter++}`,
-      );
+      let cacheCell: CacheCell | undefined;
 
-      const cacheMarker = leaflet.marker(gridCenter, { icon: cacheIcon });
+      if (cacheStates[cacheKey]) {
+        cacheCell = new CacheCell(newRow, newCol);
+        cacheCell.fromMemento(cacheStates[cacheKey]);
+      } else if (nextRandom() < CACHE_SPAWN_PROBABILITY) {
+        const initialCoinOffering = Math.floor(nextRandom() * 10 + 1);
+        const coinIds = Array.from(
+          { length: initialCoinOffering },
+          (_, index) => `${newRow}:${newCol} serial# ${index}`,
+        );
+        cacheCell = new CacheCell(newRow, newCol, coinIds);
+        cacheStates[cacheKey] = cacheCell.toMemento();
+      }
 
-      const update = () => {
-        const content = createPopupContent(cell, coinIds);
-        cacheMarker.bindPopup(content, { closeOnClick: false }).openPopup();
-      };
+      if (cacheCell) {
+        leaflet.marker(gridCenter, { icon: cacheIcon })
+          .bindPopup(createPopupContent(cacheCell), { closeOnClick: false })
+          .addTo(map);
 
-      update(); // Initialize popup
-      cacheMarker.addTo(map);
+        cacheStates[cacheKey] = cacheCell.toMemento();
+      }
     }
   }
 }
+
+function movePlayer(deltaX: number, deltaY: number) {
+  playerRow += deltaY;
+  playerCol += deltaX;
+  playerMarker.setLatLng(
+    leaflet.latLng(playerRow * TILE_DEGREES, playerCol * TILE_DEGREES),
+  );
+  updateMapView();
+}
+
+document.getElementById("north")?.addEventListener(
+  "click",
+  () => movePlayer(0, 1),
+);
+document.getElementById("south")?.addEventListener(
+  "click",
+  () => movePlayer(0, -1),
+);
+document.getElementById("east")?.addEventListener(
+  "click",
+  () => movePlayer(1, 0),
+);
+document.getElementById("west")?.addEventListener(
+  "click",
+  () => movePlayer(-1, 0),
+);
+
+document.getElementById("reset")?.addEventListener("click", () => {
+  playerRow = Math.round(OAKES_CLASSROOM.lat / TILE_DEGREES);
+  playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
+  playerMarker.setLatLng(OAKES_CLASSROOM);
+  updateMapView();
+});
+
+// Initialize the map view on load
+updateMapView();

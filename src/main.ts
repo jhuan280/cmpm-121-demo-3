@@ -32,8 +32,8 @@ const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
 // Gameplay parameters
 const GAMEPLAY_ZOOM_LEVEL = 19;
 const TILE_DEGREES = 1e-4;
-const NEIGHBORHOOD_SIZE = 8;
-const CACHE_SPAWN_PROBABILITY = 0.1;
+const NEIGHBORHOOD_SIZE = 5; // Adjusted for a smaller vicinity
+const CACHE_SPAWN_PROBABILITY = 0.05; // Reduced probability for fewer caches
 
 // Cache state management using memento
 const cacheStates: Record<string, string> = {};

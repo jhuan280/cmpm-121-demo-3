@@ -149,7 +149,7 @@ function createPopupContent(cell: CacheCell) {
         .map(
           (coinId, index) => `
           <div>
-            <span class="coin-id" data-cache="${cell.i}-${cell.j}">${coinId}</span>
+            ${coinId}
             <button id="collect-${cell.i}-${cell.j}-${index}">Collect</button>
           </div>`,
         )
@@ -178,20 +178,6 @@ function createPopupContent(cell: CacheCell) {
             refreshContent(); // Re-render the coin list
           },
         );
-
-      popupContent.querySelector(`.coin-id[data-cache="${cell.i}-${cell.j}"]`)
-        ?.addEventListener("click", (e) => {
-          const targetCache = (e.target as HTMLElement).dataset.cache;
-          if (targetCache) {
-            const [i, j] = targetCache.split("-").map(Number);
-            const cacheLatLng = leaflet.latLng(
-              i * TILE_DEGREES,
-              j * TILE_DEGREES,
-            );
-            map.setView(cacheLatLng, GAMEPLAY_ZOOM_LEVEL);
-            console.log(`Centered map on cache at (${i}, ${j})`);
-          }
-        });
     });
 
     popupContent.querySelector("#deposit")?.addEventListener("click", () => {
@@ -287,6 +273,7 @@ function resetGameState() {
       "Are you sure you want to reset your game state? This will return all coins to their home caches and erase your location history.",
     )
   ) {
+    // Reset player position and states
     playerRow = Math.round(OAKES_CLASSROOM.lat / TILE_DEGREES);
     playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
     playerCoins = [];
@@ -294,10 +281,16 @@ function resetGameState() {
     movementPath = [
       [playerRow * TILE_DEGREES, playerCol * TILE_DEGREES],
     ]; // Reset movement history
+
+    // Update player marker position and movement path
     playerMarker.setLatLng(OAKES_CLASSROOM);
     movementPolyline.setLatLngs(movementPath);
-    updateMapView();
-    saveGameData(); // Reset states
+
+    // Center map on starting location
+    map.setView(OAKES_CLASSROOM, GAMEPLAY_ZOOM_LEVEL);
+
+    updateMapView(); // Refresh the map with reset data
+    saveGameData(); // Persist reset states
     console.log("Game state has been reset.");
   }
 }

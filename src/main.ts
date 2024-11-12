@@ -66,9 +66,15 @@ class CacheCell implements Memento<string> {
   }
 }
 
-// Track player position in terms of grid coordinates (declare before loading)
+// Track player position in terms of grid coordinates
 let playerRow = Math.round(OAKES_CLASSROOM.lat / TILE_DEGREES);
 let playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
+
+// Movement history
+let movementPath: [number, number][] = [[
+  playerRow * TILE_DEGREES,
+  playerCol * TILE_DEGREES,
+]];
 
 // Load player and cache data from localStorage if available
 const savedData = localStorage.getItem("gameData");
@@ -79,6 +85,7 @@ if (savedData) {
     playerRow = parsedData.row ?? playerRow;
     playerCol = parsedData.col ?? playerCol;
     cacheStates = parsedData.cacheStates || {};
+    movementPath = parsedData.movementPath || movementPath;
   } catch (e) {
     console.error("Failed to load saved data:", e);
   }
@@ -109,6 +116,11 @@ const playerMarker = leaflet.marker([
   playerCol * TILE_DEGREES,
 ]).bindTooltip("Player")
   .addTo(map);
+
+// Add a polyline for the player's movement
+const movementPolyline = leaflet.polyline(movementPath, { color: "red" }).addTo(
+  map,
+);
 
 // Custom icon for cache spots
 const cacheIcon = new leaflet.DivIcon({
@@ -197,6 +209,7 @@ function saveGameData() {
     col: playerCol,
     coins: playerCoins,
     cacheStates: cacheStates,
+    movementPath: movementPath,
   };
   localStorage.setItem("gameData", JSON.stringify(gameData));
 }
@@ -229,7 +242,6 @@ function updateMapView() {
 
       let cacheCell: CacheCell | undefined;
       if (cacheStates[cacheKey]) {
-        // Restore the state from cache
         cacheCell = new CacheCell(newRow, newCol);
         cacheCell.fromMemento(cacheStates[cacheKey]);
       } else if (nextRandom() < CACHE_SPAWN_PROBABILITY) {
@@ -256,11 +268,17 @@ function updateMapView() {
 function movePlayer(deltaX: number, deltaY: number) {
   playerRow += deltaY;
   playerCol += deltaX;
-  playerMarker.setLatLng(
-    leaflet.latLng(playerRow * TILE_DEGREES, playerCol * TILE_DEGREES),
-  );
+  const newLatLng: [number, number] = [
+    playerRow * TILE_DEGREES,
+    playerCol * TILE_DEGREES,
+  ];
+  movementPath.push(newLatLng);
+  playerMarker.setLatLng(newLatLng);
+
+  movementPolyline.setLatLngs(movementPath); // Update polyline
+
   updateMapView();
-  saveGameData(); // Save position immediately
+  saveGameData(); // Save position and path immediately
 }
 
 function toggleGeolocation() {
@@ -274,11 +292,18 @@ function toggleGeolocation() {
         const coords = position.coords;
         playerRow = Math.round(coords.latitude / TILE_DEGREES);
         playerCol = Math.round(coords.longitude / TILE_DEGREES);
-        const playerLatLng = leaflet.latLng(coords.latitude, coords.longitude);
+        const playerLatLng: [number, number] = [
+          coords.latitude,
+          coords.longitude,
+        ];
         playerMarker.setLatLng(playerLatLng);
+
+        movementPath.push(playerLatLng);
+        movementPolyline.setLatLngs(movementPath);
+
         map.setView(playerLatLng, GAMEPLAY_ZOOM_LEVEL);
         updateMapView();
-        saveGameData(); // Save position immediately
+        saveGameData();
       },
       (error) => {
         console.error("Geolocation error:", error);
@@ -311,8 +336,10 @@ document.getElementById("reset")?.addEventListener("click", () => {
   playerRow = Math.round(OAKES_CLASSROOM.lat / TILE_DEGREES);
   playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
   playerMarker.setLatLng(OAKES_CLASSROOM);
+  movementPath = [[playerRow * TILE_DEGREES, playerCol * TILE_DEGREES]]; // Reset movement history
+  movementPolyline.setLatLngs(movementPath);
   updateMapView();
-  saveGameData(); // Also save this reset state
+  saveGameData();
 });
 
 // Enable geolocation tracking when the 🌐 button is clicked

@@ -7,7 +7,6 @@ import "./style.css";
 
 // Fix missing marker images
 import "./leafletWorkaround.ts";
-//-----import statements-----
 
 // Define the seeded random number generator
 function seededRandom(seed: number) {
@@ -32,11 +31,11 @@ const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
 // Gameplay parameters
 const GAMEPLAY_ZOOM_LEVEL = 19;
 const TILE_DEGREES = 1e-4;
-const NEIGHBORHOOD_SIZE = 5; // Adjusted for a smaller vicinity
-const CACHE_SPAWN_PROBABILITY = 0.05; // Reduced probability for fewer caches
+const NEIGHBORHOOD_SIZE = 5;
+const CACHE_SPAWN_PROBABILITY = 0.05;
 
 // Cache state management using memento
-const cacheStates: Record<string, string> = {};
+let cacheStates: Record<string, string> = {};
 
 // Interface and class for CacheCell using the Memento pattern
 interface Memento<T> {
@@ -67,13 +66,27 @@ class CacheCell implements Memento<string> {
   }
 }
 
-// Track player position in terms of grid coordinates
+// Track player position in terms of grid coordinates (declare before loading)
 let playerRow = Math.round(OAKES_CLASSROOM.lat / TILE_DEGREES);
 let playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
 
+// Load player and cache data from localStorage if available
+const savedData = localStorage.getItem("gameData");
+if (savedData) {
+  try {
+    const parsedData = JSON.parse(savedData);
+    playerCoins = parsedData.coins || [];
+    playerRow = parsedData.row ?? playerRow;
+    playerCol = parsedData.col ?? playerCol;
+    cacheStates = parsedData.cacheStates || {};
+  } catch (e) {
+    console.error("Failed to load saved data:", e);
+  }
+}
+
 // Create the map
 const map = leaflet.map(document.getElementById("map")!, {
-  center: OAKES_CLASSROOM,
+  center: leaflet.latLng(playerRow * TILE_DEGREES, playerCol * TILE_DEGREES),
   zoom: GAMEPLAY_ZOOM_LEVEL,
   minZoom: GAMEPLAY_ZOOM_LEVEL,
   maxZoom: GAMEPLAY_ZOOM_LEVEL,
@@ -91,7 +104,10 @@ leaflet
   .addTo(map);
 
 // Add a marker to represent the player
-const playerMarker = leaflet.marker(OAKES_CLASSROOM).bindTooltip("Player")
+const playerMarker = leaflet.marker([
+  playerRow * TILE_DEGREES,
+  playerCol * TILE_DEGREES,
+]).bindTooltip("Player")
   .addTo(map);
 
 // Custom icon for cache spots
@@ -133,6 +149,11 @@ function createPopupContent(cell: CacheCell) {
           () => {
             playerCoins.push(coinId);
             remainingCoinIds.splice(index, 1);
+            cacheStates[`${cell.i},${cell.j}`] = createCacheState(
+              cell,
+              remainingCoinIds,
+            );
+            saveGameData(); // Save updated state immediately
             console.log(
               `Collected: ${coinId}. Player now has ${playerCoins.length} coins.`,
             );
@@ -146,10 +167,15 @@ function createPopupContent(cell: CacheCell) {
       () => {
         if (playerCoins.length > 0) {
           remainingCoinIds.push(...playerCoins);
+          playerCoins = [];
+          cacheStates[`${cell.i},${cell.j}`] = createCacheState(
+            cell,
+            remainingCoinIds,
+          );
+          saveGameData(); // Save updated state immediately
           console.log(
             `Deposited coins. Cache now has: ${remainingCoinIds.length} coins`,
           );
-          playerCoins = [];
           refreshContent();
         }
       },
@@ -159,6 +185,20 @@ function createPopupContent(cell: CacheCell) {
   refreshContent();
 
   return popupContent;
+}
+
+function createCacheState(cell: CacheCell, remainingCoinIds: string[]): string {
+  return JSON.stringify({ i: cell.i, j: cell.j, coinIds: remainingCoinIds });
+}
+
+function saveGameData() {
+  const gameData = {
+    row: playerRow,
+    col: playerCol,
+    coins: playerCoins,
+    cacheStates: cacheStates,
+  };
+  localStorage.setItem("gameData", JSON.stringify(gameData));
 }
 
 function updateMapView() {
@@ -188,8 +228,8 @@ function updateMapView() {
       );
 
       let cacheCell: CacheCell | undefined;
-
       if (cacheStates[cacheKey]) {
+        // Restore the state from cache
         cacheCell = new CacheCell(newRow, newCol);
         cacheCell.fromMemento(cacheStates[cacheKey]);
       } else if (nextRandom() < CACHE_SPAWN_PROBABILITY) {
@@ -220,6 +260,7 @@ function movePlayer(deltaX: number, deltaY: number) {
     leaflet.latLng(playerRow * TILE_DEGREES, playerCol * TILE_DEGREES),
   );
   updateMapView();
+  saveGameData(); // Save position immediately
 }
 
 function toggleGeolocation() {
@@ -235,8 +276,9 @@ function toggleGeolocation() {
         playerCol = Math.round(coords.longitude / TILE_DEGREES);
         const playerLatLng = leaflet.latLng(coords.latitude, coords.longitude);
         playerMarker.setLatLng(playerLatLng);
-        map.setView(playerLatLng, GAMEPLAY_ZOOM_LEVEL); // Center map on player's new position
+        map.setView(playerLatLng, GAMEPLAY_ZOOM_LEVEL);
         updateMapView();
+        saveGameData(); // Save position immediately
       },
       (error) => {
         console.error("Geolocation error:", error);
@@ -270,6 +312,7 @@ document.getElementById("reset")?.addEventListener("click", () => {
   playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
   playerMarker.setLatLng(OAKES_CLASSROOM);
   updateMapView();
+  saveGameData(); // Also save this reset state
 });
 
 // Enable geolocation tracking when the 🌐 button is clicked

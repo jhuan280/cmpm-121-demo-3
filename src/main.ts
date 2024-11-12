@@ -26,7 +26,10 @@ function nextRandom() {
 let playerCoins: string[] = [];
 
 // Location of our classroom
-const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
+const OAKES_CLASSROOM = leaflet.latLng(
+  36.98949379578401,
+  -122.06277128548504,
+);
 
 // Gameplay parameters
 const GAMEPLAY_ZOOM_LEVEL = 19;
@@ -71,10 +74,9 @@ let playerRow = Math.round(OAKES_CLASSROOM.lat / TILE_DEGREES);
 let playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
 
 // Movement history
-let movementPath: [number, number][] = [[
-  playerRow * TILE_DEGREES,
-  playerCol * TILE_DEGREES,
-]];
+let movementPath: [number, number][] = [
+  [playerRow * TILE_DEGREES, playerCol * TILE_DEGREES],
+];
 
 // Load player and cache data from localStorage if available
 const savedData = localStorage.getItem("gameData");
@@ -111,16 +113,15 @@ leaflet
   .addTo(map);
 
 // Add a marker to represent the player
-const playerMarker = leaflet.marker([
-  playerRow * TILE_DEGREES,
-  playerCol * TILE_DEGREES,
-]).bindTooltip("Player")
+const playerMarker = leaflet
+  .marker([playerRow * TILE_DEGREES, playerCol * TILE_DEGREES])
+  .bindTooltip("Player")
   .addTo(map);
 
 // Add a polyline for the player's movement
-const movementPolyline = leaflet.polyline(movementPath, { color: "red" }).addTo(
-  map,
-);
+const movementPolyline = leaflet
+  .polyline(movementPath, { color: "red" })
+  .addTo(map);
 
 // Custom icon for cache spots
 const cacheIcon = new leaflet.DivIcon({
@@ -144,18 +145,23 @@ function createPopupContent(cell: CacheCell) {
       <p>Cache Coins: ${remainingCoinIds.length}</p>
       <div id="coins-list">
         ${
-      remainingCoinIds.map((coinId, index) => `
+      remainingCoinIds
+        .map(
+          (coinId, index) => `
           <div>
             ${coinId}
             <button id="collect-${cell.i}-${cell.j}-${index}">Collect</button>
-          </div>`).join("")
+          </div>`,
+        )
+        .join("")
     }
       </div>
       <button id="deposit">Deposit</button>
     `;
 
     remainingCoinIds.forEach((coinId, index) => {
-      popupContent.querySelector(`#collect-${cell.i}-${cell.j}-${index}`)
+      popupContent
+        .querySelector(`#collect-${cell.i}-${cell.j}-${index}`)
         ?.addEventListener(
           "click",
           () => {
@@ -174,24 +180,21 @@ function createPopupContent(cell: CacheCell) {
         );
     });
 
-    popupContent.querySelector("#deposit")?.addEventListener(
-      "click",
-      () => {
-        if (playerCoins.length > 0) {
-          remainingCoinIds.push(...playerCoins);
-          playerCoins = [];
-          cacheStates[`${cell.i},${cell.j}`] = createCacheState(
-            cell,
-            remainingCoinIds,
-          );
-          saveGameData(); // Save updated state immediately
-          console.log(
-            `Deposited coins. Cache now has: ${remainingCoinIds.length} coins`,
-          );
-          refreshContent();
-        }
-      },
-    );
+    popupContent.querySelector("#deposit")?.addEventListener("click", () => {
+      if (playerCoins.length > 0) {
+        remainingCoinIds.push(...playerCoins);
+        playerCoins = [];
+        cacheStates[`${cell.i},${cell.j}`] = createCacheState(
+          cell,
+          remainingCoinIds,
+        );
+        saveGameData(); // Save updated state immediately
+        console.log(
+          `Deposited coins. Cache now has: ${remainingCoinIds.length} coins`,
+        );
+        refreshContent();
+      }
+    });
   };
 
   refreshContent();
@@ -255,13 +258,33 @@ function updateMapView() {
       }
 
       if (cacheCell) {
-        leaflet.marker(gridCenter, { icon: cacheIcon })
+        leaflet
+          .marker(gridCenter, { icon: cacheIcon })
           .bindPopup(createPopupContent(cacheCell), { closeOnClick: false })
           .addTo(map);
-
-        cacheStates[cacheKey] = cacheCell.toMemento();
       }
     }
+  }
+}
+
+function resetGameState() {
+  if (
+    confirm(
+      "Are you sure you want to reset your game state? This will return all coins to their home caches and erase your location history.",
+    )
+  ) {
+    playerRow = Math.round(OAKES_CLASSROOM.lat / TILE_DEGREES);
+    playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
+    playerCoins = [];
+    cacheStates = {}; // Clear previous cache states
+    movementPath = [
+      [playerRow * TILE_DEGREES, playerCol * TILE_DEGREES],
+    ]; // Reset movement history
+    playerMarker.setLatLng(OAKES_CLASSROOM);
+    movementPolyline.setLatLngs(movementPath);
+    updateMapView();
+    saveGameData(); // Reset states
+    console.log("Game state has been reset.");
   }
 }
 
@@ -315,35 +338,25 @@ function toggleGeolocation() {
   }
 }
 
-document.getElementById("north")?.addEventListener(
-  "click",
-  () => movePlayer(0, 1),
-);
-document.getElementById("south")?.addEventListener(
-  "click",
-  () => movePlayer(0, -1),
-);
-document.getElementById("east")?.addEventListener(
-  "click",
-  () => movePlayer(1, 0),
-);
-document.getElementById("west")?.addEventListener(
-  "click",
-  () => movePlayer(-1, 0),
-);
+document
+  .getElementById("north")
+  ?.addEventListener("click", () => movePlayer(0, 1));
+document
+  .getElementById("south")
+  ?.addEventListener("click", () => movePlayer(0, -1));
+document
+  .getElementById("east")
+  ?.addEventListener("click", () => movePlayer(1, 0));
+document
+  .getElementById("west")
+  ?.addEventListener("click", () => movePlayer(-1, 0));
 
-document.getElementById("reset")?.addEventListener("click", () => {
-  playerRow = Math.round(OAKES_CLASSROOM.lat / TILE_DEGREES);
-  playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
-  playerMarker.setLatLng(OAKES_CLASSROOM);
-  movementPath = [[playerRow * TILE_DEGREES, playerCol * TILE_DEGREES]]; // Reset movement history
-  movementPolyline.setLatLngs(movementPath);
-  updateMapView();
-  saveGameData();
-});
+document.getElementById("reset")?.addEventListener("click", resetGameState);
 
 // Enable geolocation tracking when the 🌐 button is clicked
-document.getElementById("sensor")?.addEventListener("click", toggleGeolocation);
+document
+  .getElementById("sensor")
+  ?.addEventListener("click", toggleGeolocation);
 
 // Initialize the map view on load
 updateMapView();

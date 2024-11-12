@@ -149,7 +149,7 @@ function createPopupContent(cell: CacheCell) {
         .map(
           (coinId, index) => `
           <div>
-            ${coinId}
+            <span class="coin-id" style="cursor: pointer" data-coin="${coinId}">${coinId}</span>
             <button id="collect-${cell.i}-${cell.j}-${index}">Collect</button>
           </div>`,
         )
@@ -178,6 +178,17 @@ function createPopupContent(cell: CacheCell) {
             refreshContent(); // Re-render the coin list
           },
         );
+
+      popupContent.querySelector(`.coin-id[data-coin="${coinId}"]`)
+        ?.addEventListener("click", () => {
+          const [cacheI, cacheJ] = coinId.match(/([-\d]+)/g)!.map(Number);
+          const cacheLatLng = leaflet.latLng(
+            cacheI * TILE_DEGREES,
+            cacheJ * TILE_DEGREES,
+          );
+          map.setView(cacheLatLng, GAMEPLAY_ZOOM_LEVEL);
+          console.log(`Centered on cache at: (${cacheI}, ${cacheJ})`);
+        });
     });
 
     popupContent.querySelector("#deposit")?.addEventListener("click", () => {

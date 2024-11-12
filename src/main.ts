@@ -102,6 +102,9 @@ const cacheIcon = new leaflet.DivIcon({
   iconAnchor: [25, 25],
 });
 
+// Geolocation tracking ID
+let geoWatchId: number | null = null;
+
 // Function to manage popups with individual coin collection
 function createPopupContent(cell: CacheCell) {
   const remainingCoinIds = [...cell.coinIds];
@@ -219,6 +222,32 @@ function movePlayer(deltaX: number, deltaY: number) {
   updateMapView();
 }
 
+function toggleGeolocation() {
+  if (geoWatchId !== null) {
+    navigator.geolocation.clearWatch(geoWatchId);
+    geoWatchId = null;
+    console.log("Stopped geolocation tracking.");
+  } else if (navigator.geolocation) {
+    geoWatchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const coords = position.coords;
+        playerRow = Math.round(coords.latitude / TILE_DEGREES);
+        playerCol = Math.round(coords.longitude / TILE_DEGREES);
+        const playerLatLng = leaflet.latLng(coords.latitude, coords.longitude);
+        playerMarker.setLatLng(playerLatLng);
+        map.setView(playerLatLng, GAMEPLAY_ZOOM_LEVEL); // Center map on player's new position
+        updateMapView();
+      },
+      (error) => {
+        console.error("Geolocation error:", error);
+      },
+    );
+    console.log("Started geolocation tracking.");
+  } else {
+    console.error("Geolocation is not supported by this browser.");
+  }
+}
+
 document.getElementById("north")?.addEventListener(
   "click",
   () => movePlayer(0, 1),
@@ -242,6 +271,9 @@ document.getElementById("reset")?.addEventListener("click", () => {
   playerMarker.setLatLng(OAKES_CLASSROOM);
   updateMapView();
 });
+
+// Enable geolocation tracking when the 🌐 button is clicked
+document.getElementById("sensor")?.addEventListener("click", toggleGeolocation);
 
 // Initialize the map view on load
 updateMapView();

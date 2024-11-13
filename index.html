@@ -1,25 +1,43 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
+<head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  </head>
-  <body>
+    <title>Game Interface</title>
+    <style>
+        #inventory {
+            margin-top: 10px;
+        }
+        #collected-coins {
+            list-style-type: none;
+            padding: 0;
+        }
+        #collected-coins li {
+            padding: 5px;
+            border-bottom: 1px solid #ccc; 
+        }
+    </style>
+</head>
+<body>
     <div id="app">
-
-      <!-- example.html -->
-      <div id="controlPanel">
-      <button id="sensor" title="sensor">🌐</button>
-      <button id="north" title="north">⬆️</button>
-      <button id="south" title="south">⬇️</button>
-      <button id="west" title="west">⬅️</button>
-      <button id="east" title="east">➡️</button>
-      <button id="reset" title="reset">🚮</button>
-    </div>
-    <div id="statusPanel"></div>
-    <div id="map"></div>
-
+        <!-- example.html -->
+        <div id="controlPanel">
+            <button id="sensor" title="sensor">🌐</button>
+            <button id="north" title="north">⬆️</button>
+            <button id="south" title="south">⬇️</button>
+            <button id="west" title="west">⬅️</button>
+            <button id="east" title="east">➡️</button>
+            <button id="reset" title="reset">🚮</button>
+        </div>
+        <div id="statusPanel"></div>
+        <div id="map"></div>
+        
+        <!-- Inventory section -->
+        <div id="inventory">
+            <h3>Inventory:</h3>
+            <ul id="collected-coins"></ul>
+        </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
-  </body>
+</body>
 </html>

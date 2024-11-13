@@ -134,6 +134,20 @@ const cacheIcon = new leaflet.DivIcon({
 // Geolocation tracking ID
 let geoWatchId: number | null = null;
 
+// Function to update the inventory UI
+function updateInventoryUI() {
+  const inventoryElement = document.getElementById("collected-coins");
+  if (inventoryElement) {
+    inventoryElement.innerHTML = ""; // Clear the current list
+
+    playerCoins.forEach((coinId) => {
+      const listItem = document.createElement("li");
+      listItem.textContent = coinId;
+      inventoryElement.appendChild(listItem);
+    });
+  }
+}
+
 // Function to manage popups with individual coin collection
 function createPopupContent(cell: CacheCell) {
   const remainingCoinIds = [...cell.coinIds];
@@ -148,10 +162,10 @@ function createPopupContent(cell: CacheCell) {
       remainingCoinIds
         .map(
           (coinId, index) => `
-          <div>
-            <span class="coin-id" style="cursor: pointer" data-coin="${coinId}">${coinId}</span>
-            <button id="collect-${cell.i}-${cell.j}-${index}">Collect</button>
-          </div>`,
+              <div>
+                <span class="coin-id" style="cursor: pointer" data-coin="${coinId}">${coinId}</span>
+                <button id="collect-${cell.i}-${cell.j}-${index}">Collect</button>
+              </div>`,
         )
         .join("")
     }
@@ -162,22 +176,20 @@ function createPopupContent(cell: CacheCell) {
     remainingCoinIds.forEach((coinId, index) => {
       popupContent
         .querySelector(`#collect-${cell.i}-${cell.j}-${index}`)
-        ?.addEventListener(
-          "click",
-          () => {
-            playerCoins.push(coinId);
-            remainingCoinIds.splice(index, 1);
-            cacheStates[`${cell.i},${cell.j}`] = createCacheState(
-              cell,
-              remainingCoinIds,
-            );
-            saveGameData(); // Save updated state immediately
-            console.log(
-              `Collected: ${coinId}. Player now has ${playerCoins.length} coins.`,
-            );
-            refreshContent(); // Re-render the coin list
-          },
-        );
+        ?.addEventListener("click", () => {
+          playerCoins.push(coinId);
+          remainingCoinIds.splice(index, 1);
+          cacheStates[`${cell.i},${cell.j}`] = createCacheState(
+            cell,
+            remainingCoinIds,
+          );
+          saveGameData(); // Save updated state immediately
+          updateInventoryUI(); // Update the UI here
+          console.log(
+            `Collected: ${coinId}. Player now has ${playerCoins.length} coins.`,
+          );
+          refreshContent(); // Re-render the coin list
+        });
 
       popupContent.querySelector(`.coin-id[data-coin="${coinId}"]`)
         ?.addEventListener("click", () => {
@@ -200,6 +212,7 @@ function createPopupContent(cell: CacheCell) {
           remainingCoinIds,
         );
         saveGameData(); // Save updated state immediately
+        updateInventoryUI(); // Update the UI here
         console.log(
           `Deposited coins. Cache now has: ${remainingCoinIds.length} coins`,
         );
@@ -209,7 +222,6 @@ function createPopupContent(cell: CacheCell) {
   };
 
   refreshContent();
-
   return popupContent;
 }
 
@@ -302,6 +314,7 @@ function resetGameState() {
 
     updateMapView(); // Refresh the map with reset data
     saveGameData(); // Persist reset states
+    updateInventoryUI(); // Also refresh the inventory
     console.log("Game state has been reset.");
   }
 }
@@ -376,5 +389,6 @@ document
   .getElementById("sensor")
   ?.addEventListener("click", toggleGeolocation);
 
-// Initialize the map view on load
+// Initialize the map view and inventory UI on load
 updateMapView();
+updateInventoryUI();

@@ -145,15 +145,16 @@ function addInventoryItem(inventoryElement: HTMLElement, coinId: string) {
 }
 
 // Function to update the inventory UI
-function updateInventoryUI() {
+// Refactor updateInventoryUI to take coins as an input parameter
+function updateInventoryUI(coins: string[]) {
   const inventoryElement = document.getElementById("collected-coins");
   if (!inventoryElement) return; // Exit if the element doesn't exist
 
   // Clear the inventory list
   clearInventoryList(inventoryElement);
 
-  // Add each coin in the player's inventory
-  playerCoins.forEach((coinId) => {
+  // Add each coin in the provided inventory list
+  coins.forEach((coinId) => {
     addInventoryItem(inventoryElement, coinId);
   });
 }
@@ -194,7 +195,7 @@ function createPopupContent(cell: CacheCell) {
             remainingCoinIds,
           );
           saveGameData(); // Save updated state immediately
-          updateInventoryUI(); // Update the UI here
+          updateInventoryUI(playerCoins);
           console.log(
             `Collected: ${coinId}. Player now has ${playerCoins.length} coins.`,
           );
@@ -222,7 +223,7 @@ function createPopupContent(cell: CacheCell) {
           remainingCoinIds,
         );
         saveGameData(); // Save updated state immediately
-        updateInventoryUI(); // Update the UI here
+        updateInventoryUI(playerCoins);
         console.log(
           `Deposited coins. Cache now has: ${remainingCoinIds.length} coins`,
         );
@@ -324,7 +325,7 @@ function resetGameState() {
 
     updateMapView(); // Refresh the map with reset data
     saveGameData(); // Persist reset states
-    updateInventoryUI(); // Also refresh the inventory
+    updateInventoryUI(playerCoins);
     console.log("Game state has been reset.");
   }
 }
@@ -441,4 +442,4 @@ document
 
 // Initialize the map view and inventory UI on load
 updateMapView();
-updateInventoryUI();
+updateInventoryUI(playerCoins);

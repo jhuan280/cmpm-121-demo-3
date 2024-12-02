@@ -134,18 +134,28 @@ const cacheIcon = new leaflet.DivIcon({
 // Geolocation tracking ID
 let geoWatchId: number | null = null;
 
+function clearInventoryList(inventoryElement: HTMLElement) {
+  inventoryElement.innerHTML = ""; // Clear all items
+}
+
+function addInventoryItem(inventoryElement: HTMLElement, coinId: string) {
+  const listItem = document.createElement("li");
+  listItem.textContent = coinId;
+  inventoryElement.appendChild(listItem);
+}
+
 // Function to update the inventory UI
 function updateInventoryUI() {
   const inventoryElement = document.getElementById("collected-coins");
-  if (inventoryElement) {
-    inventoryElement.innerHTML = ""; // Clear the current list
+  if (!inventoryElement) return; // Exit if the element doesn't exist
 
-    playerCoins.forEach((coinId) => {
-      const listItem = document.createElement("li");
-      listItem.textContent = coinId;
-      inventoryElement.appendChild(listItem);
-    });
-  }
+  // Clear the inventory list
+  clearInventoryList(inventoryElement);
+
+  // Add each coin in the player's inventory
+  playerCoins.forEach((coinId) => {
+    addInventoryItem(inventoryElement, coinId);
+  });
 }
 
 // Function to manage popups with individual coin collection

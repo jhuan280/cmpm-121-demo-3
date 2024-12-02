@@ -319,53 +319,93 @@ function resetGameState() {
   }
 }
 
-function movePlayer(deltaX: number, deltaY: number) {
+function movePlayerPosition(deltaX: number, deltaY: number): [number, number] {
+  // Update game state: playerRow, playerCol
   playerRow += deltaY;
   playerCol += deltaX;
   const newLatLng: [number, number] = [
     playerRow * TILE_DEGREES,
     playerCol * TILE_DEGREES,
   ];
+
+  // Update movement tracking
   movementPath.push(newLatLng);
-  playerMarker.setLatLng(newLatLng);
 
-  movementPolyline.setLatLngs(movementPath); // Update polyline
-
-  updateMapView();
-  saveGameData(); // Save position and path immediately
+  // Return the new position so it can be used by other functions
+  return newLatLng;
 }
 
-function toggleGeolocation() {
+function updateUIWithPlayerPosition(latLng: [number, number]) {
+  // Update visual representation of player on the map
+  playerMarker.setLatLng(latLng);
+
+  // Update movement polyline for visual feedback
+  movementPolyline.setLatLngs(movementPath);
+}
+
+function movePlayer(deltaX: number, deltaY: number) {
+  // Update player position and movement path
+  const newLatLng = movePlayerPosition(deltaX, deltaY);
+
+  // Update the UI with the new player position
+  updateUIWithPlayerPosition(newLatLng);
+
+  // Refresh the map and save the game state
+  updateMapView();
+  saveGameData();
+}
+
+function startGeolocationTracking() {
+  if (!navigator.geolocation) {
+    console.error("Geolocation is not supported by this browser.");
+    return;
+  }
+
+  geoWatchId = navigator.geolocation.watchPosition(
+    (position) => {
+      const coords = position.coords;
+
+      // Update player's row and column based on geolocation
+      playerRow = Math.round(coords.latitude / TILE_DEGREES);
+      playerCol = Math.round(coords.longitude / TILE_DEGREES);
+      const playerLatLng: [number, number] = [
+        coords.latitude,
+        coords.longitude,
+      ];
+
+      // Update UI elements
+      movementPath.push(playerLatLng);
+      playerMarker.setLatLng(playerLatLng);
+      movementPolyline.setLatLngs(movementPath);
+      map.setView(playerLatLng, GAMEPLAY_ZOOM_LEVEL);
+
+      // Refresh the map and save game state
+      updateMapView();
+      saveGameData();
+    },
+    handleGeolocationError,
+  );
+
+  console.log("Started geolocation tracking.");
+}
+
+function stopGeolocationTracking() {
   if (geoWatchId !== null) {
     navigator.geolocation.clearWatch(geoWatchId);
     geoWatchId = null;
     console.log("Stopped geolocation tracking.");
-  } else if (navigator.geolocation) {
-    geoWatchId = navigator.geolocation.watchPosition(
-      (position) => {
-        const coords = position.coords;
-        playerRow = Math.round(coords.latitude / TILE_DEGREES);
-        playerCol = Math.round(coords.longitude / TILE_DEGREES);
-        const playerLatLng: [number, number] = [
-          coords.latitude,
-          coords.longitude,
-        ];
-        playerMarker.setLatLng(playerLatLng);
+  }
+}
 
-        movementPath.push(playerLatLng);
-        movementPolyline.setLatLngs(movementPath);
+function handleGeolocationError(error: GeolocationPositionError) {
+  console.error("Geolocation error:", error);
+}
 
-        map.setView(playerLatLng, GAMEPLAY_ZOOM_LEVEL);
-        updateMapView();
-        saveGameData();
-      },
-      (error) => {
-        console.error("Geolocation error:", error);
-      },
-    );
-    console.log("Started geolocation tracking.");
+function toggleGeolocation() {
+  if (geoWatchId !== null) {
+    stopGeolocationTracking();
   } else {
-    console.error("Geolocation is not supported by this browser.");
+    startGeolocationTracking();
   }
 }
 

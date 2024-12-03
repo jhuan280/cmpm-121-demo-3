@@ -22,9 +22,6 @@ function nextRandom() {
   return seededRandom(seedValue);
 }
 
-// Player's collected coins as unique serial numbers
-let playerCoins: string[] = [];
-
 // Location of our classroom
 const OAKES_CLASSROOM = leaflet.latLng(
   36.98949379578401,
@@ -69,25 +66,92 @@ class CacheCell implements Memento<string> {
   }
 }
 
-// Track player position in terms of grid coordinates
-let playerRow = Math.round(OAKES_CLASSROOM.lat / TILE_DEGREES);
-let playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
+// PLAYER MANAGEMENT CLASS
+class PlayerManager {
+  private row: number;
+  private col: number;
+  private movementPath: [number, number][];
+  private coins: string[];
 
-// Movement history
-let movementPath: [number, number][] = [
-  [playerRow * TILE_DEGREES, playerCol * TILE_DEGREES],
-];
+  constructor(
+    initialRow: number,
+    initialCol: number,
+    initialLatLng: [number, number],
+  ) {
+    this.row = initialRow;
+    this.col = initialCol;
+    this.movementPath = [initialLatLng];
+    this.coins = [];
+  }
+
+  // ** State Getters **
+  public getRow(): number {
+    return this.row;
+  }
+  public getCol(): number {
+    return this.col;
+  }
+  public getCurrentLatLng(): [number, number] {
+    return [this.row * TILE_DEGREES, this.col * TILE_DEGREES];
+  }
+  public getMovementPath(): [number, number][] {
+    return [...this.movementPath];
+  }
+  public getCoins(): string[] {
+    return [...this.coins];
+  }
+
+  // ** State Updaters **
+  public updatePosition(deltaRow: number, deltaCol: number) {
+    this.row += deltaRow;
+    this.col += deltaCol;
+    this.movementPath.push(this.getCurrentLatLng());
+  }
+
+  public addCoin(coinId: string) {
+    this.coins.push(coinId);
+  }
+  public clearCoins() {
+    this.coins = [];
+  }
+  public reset(
+    initialRow: number,
+    initialCol: number,
+    initialLatLng: [number, number],
+  ) {
+    this.row = initialRow;
+    this.col = initialCol;
+    this.movementPath = [initialLatLng];
+    this.coins = [];
+  }
+}
+
+// Initialize PlayerManager
+const playerManager = new PlayerManager(
+  Math.round(OAKES_CLASSROOM.lat / TILE_DEGREES),
+  Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES),
+  [OAKES_CLASSROOM.lat, OAKES_CLASSROOM.lng],
+);
 
 // Load player and cache data from localStorage if available
 const savedData = localStorage.getItem("gameData");
 if (savedData) {
   try {
     const parsedData = JSON.parse(savedData);
-    playerCoins = parsedData.coins || [];
-    playerRow = parsedData.row ?? playerRow;
-    playerCol = parsedData.col ?? playerCol;
+
+    // Use PlayerManager to load coins and movement path
+    playerManager.clearCoins();
+    parsedData.coins?.forEach((coinId: string) =>
+      playerManager.addCoin(coinId)
+    );
+    parsedData.movementPath?.forEach((latLng: [number, number]) =>
+      playerManager.updatePosition(
+        latLng[0] / TILE_DEGREES - playerManager.getRow(),
+        latLng[1] / TILE_DEGREES - playerManager.getCol(),
+      )
+    );
+
     cacheStates = parsedData.cacheStates || {};
-    movementPath = parsedData.movementPath || movementPath;
   } catch (e) {
     console.error("Failed to load saved data:", e);
   }
@@ -95,7 +159,7 @@ if (savedData) {
 
 // Create the map
 const map = leaflet.map(document.getElementById("map")!, {
-  center: leaflet.latLng(playerRow * TILE_DEGREES, playerCol * TILE_DEGREES),
+  center: leaflet.latLng(playerManager.getCurrentLatLng()),
   zoom: GAMEPLAY_ZOOM_LEVEL,
   minZoom: GAMEPLAY_ZOOM_LEVEL,
   maxZoom: GAMEPLAY_ZOOM_LEVEL,
@@ -103,7 +167,7 @@ const map = leaflet.map(document.getElementById("map")!, {
   scrollWheelZoom: false,
 });
 
-// Populate the map with a background tile layer
+// Map Layer and the Player's Marker
 leaflet
   .tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
@@ -112,18 +176,15 @@ leaflet
   })
   .addTo(map);
 
-// Add a marker to represent the player
 const playerMarker = leaflet
-  .marker([playerRow * TILE_DEGREES, playerCol * TILE_DEGREES])
+  .marker(playerManager.getCurrentLatLng())
   .bindTooltip("Player")
   .addTo(map);
 
-// Add a polyline for the player's movement
 const movementPolyline = leaflet
-  .polyline(movementPath, { color: "red" })
+  .polyline(playerManager.getMovementPath(), { color: "red" })
   .addTo(map);
 
-// Custom icon for cache spots
 const cacheIcon = new leaflet.DivIcon({
   className: "custom-cache-icon",
   html: "🎁",
@@ -131,40 +192,131 @@ const cacheIcon = new leaflet.DivIcon({
   iconAnchor: [25, 25],
 });
 
-// Geolocation tracking ID
-let geoWatchId: number | null = null;
-
-function clearInventoryList(inventoryElement: HTMLElement) {
-  inventoryElement.innerHTML = ""; // Clear all items
-}
-
-function addInventoryItem(inventoryElement: HTMLElement, coinId: string) {
-  const listItem = document.createElement("li");
-  listItem.textContent = coinId;
-  inventoryElement.appendChild(listItem);
-}
-
-// Function to update the inventory UI
-// Refactor updateInventoryUI to take coins as an input parameter
-function updateInventoryUI(coins: string[]) {
+// Utility Functions
+function updateInventoryUI() {
   const inventoryElement = document.getElementById("collected-coins");
-  if (!inventoryElement) return; // Exit if the element doesn't exist
+  if (!inventoryElement) return;
 
-  // Clear the inventory list
-  clearInventoryList(inventoryElement);
-
-  // Add each coin in the provided inventory list
-  coins.forEach((coinId) => {
-    addInventoryItem(inventoryElement, coinId);
+  inventoryElement.innerHTML = ""; // Clear inventory list
+  playerManager.getCoins().forEach((coinId) => {
+    const listItem = document.createElement("li");
+    listItem.textContent = coinId;
+    inventoryElement.appendChild(listItem);
   });
 }
 
-// Function to manage popups with individual coin collection
-function createPopupContent(cell: CacheCell) {
+// Geolocation ID for dynamic tracking
+let geoWatchId: number | null = null;
+
+// Function to start geolocation tracking
+function startGeolocationTracking() {
+  if (!navigator.geolocation) {
+    console.error("Geolocation is not supported by this browser.");
+    return;
+  }
+
+  geoWatchId = navigator.geolocation.watchPosition(
+    (position) => {
+      const coords = position.coords;
+
+      // Convert latitude/longitude to grid tile coordinates
+      const newRow = Math.round(coords.latitude / TILE_DEGREES);
+      const newCol = Math.round(coords.longitude / TILE_DEGREES);
+
+      // Compute movement deltas
+      const deltaRow = newRow - playerManager.getRow();
+      const deltaCol = newCol - playerManager.getCol();
+
+      // Update PlayerManager with the new position
+      playerManager.updatePosition(deltaRow, deltaCol);
+
+      // Update the player's marker and movement visualization on the map
+      playerMarker.setLatLng(playerManager.getCurrentLatLng());
+      movementPolyline.setLatLngs(playerManager.getMovementPath());
+      map.setView(playerManager.getCurrentLatLng(), GAMEPLAY_ZOOM_LEVEL);
+
+      // Refresh the map's cache view and save the updated state to localStorage
+      updateMapView();
+      saveGameData();
+    },
+    (error) => {
+      console.error("Failed to retrieve geolocation:", error.message);
+    },
+    {
+      enableHighAccuracy: true, // Use GPS if available
+    },
+  );
+
+  console.log("Geolocation tracking started.");
+}
+
+// Function to stop geolocation tracking
+function stopGeolocationTracking() {
+  if (geoWatchId !== null) {
+    navigator.geolocation.clearWatch(geoWatchId);
+    geoWatchId = null;
+    console.log("Geolocation tracking stopped.");
+  }
+}
+
+// Function to toggle geolocation tracking (on/off)
+function toggleGeolocation() {
+  if (geoWatchId !== null) {
+    stopGeolocationTracking();
+  } else {
+    startGeolocationTracking();
+  }
+}
+
+function saveGameData() {
+  const gameData = {
+    row: playerManager.getRow(),
+    col: playerManager.getCol(),
+    coins: playerManager.getCoins(),
+    cacheStates,
+    movementPath: playerManager.getMovementPath(),
+  };
+  localStorage.setItem("gameData", JSON.stringify(gameData));
+}
+
+function movePlayer(deltaX: number, deltaY: number) {
+  playerManager.updatePosition(deltaY, deltaX);
+  playerMarker.setLatLng(playerManager.getCurrentLatLng());
+  movementPolyline.setLatLngs(playerManager.getMovementPath());
+  updateMapView();
+  saveGameData();
+}
+
+function resetGameState() {
+  if (
+    confirm(
+      "Are you sure you want to reset your game state? This will return all coins to their home caches and erase your location history.",
+    )
+  ) {
+    playerManager.reset(
+      Math.round(OAKES_CLASSROOM.lat / TILE_DEGREES),
+      Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES),
+      [OAKES_CLASSROOM.lat, OAKES_CLASSROOM.lng],
+    );
+    cacheStates = {};
+    map.setView(OAKES_CLASSROOM, GAMEPLAY_ZOOM_LEVEL);
+    movementPolyline.setLatLngs([]);
+    updateMapView();
+    updateInventoryUI();
+    saveGameData();
+  }
+}
+
+function createPopupContent(cell: CacheCell): HTMLElement {
+  // Copy the cell's coins for manipulation
   const remainingCoinIds = [...cell.coinIds];
+
+  // Create a container element for the popup
   const popupContent = document.createElement("div");
 
+  // Define a function to refresh the popup content after interactions
   const refreshContent = () => {
+    // Update the inner HTML of the popup
     popupContent.innerHTML = `
       <p>Cache spot: (${cell.i}, ${cell.j})</p>
       <p>Cache Coins: ${remainingCoinIds.length}</p>
@@ -184,25 +336,32 @@ function createPopupContent(cell: CacheCell) {
       <button id="deposit">Deposit</button>
     `;
 
+    // Add event listeners for "Collect" buttons
     remainingCoinIds.forEach((coinId, index) => {
       popupContent
         .querySelector(`#collect-${cell.i}-${cell.j}-${index}`)
         ?.addEventListener("click", () => {
-          playerCoins.push(coinId);
-          remainingCoinIds.splice(index, 1);
+          // Collect the coin by adding it to the player's inventory
+          playerManager.addCoin(coinId);
+          remainingCoinIds.splice(index, 1); // Remove from cache
+
+          // Update cache state and save the game
           cacheStates[`${cell.i},${cell.j}`] = createCacheState(
             cell,
             remainingCoinIds,
           );
-          saveGameData(); // Save updated state immediately
-          updateInventoryUI(playerCoins);
+          saveGameData(); // Persist the state
+          updateInventoryUI(); // Update inventory display
           console.log(
-            `Collected: ${coinId}. Player now has ${playerCoins.length} coins.`,
+            `Collected: ${coinId}. Player now has ${playerManager.getCoins().length} coins.`,
           );
-          refreshContent(); // Re-render the coin list
+
+          refreshContent(); // Re-render the popup content
         });
 
-      popupContent.querySelector(`.coin-id[data-coin="${coinId}"]`)
+      // Add a listener to center the map view on the coin's cache when clicked
+      popupContent
+        .querySelector(`.coin-id[data-coin="${coinId}"]`)
         ?.addEventListener("click", () => {
           const [cacheI, cacheJ] = coinId.match(/([-\d]+)/g)!.map(Number);
           const cacheLatLng = leaflet.latLng(
@@ -214,41 +373,38 @@ function createPopupContent(cell: CacheCell) {
         });
     });
 
+    // Add event listener for "Deposit" button
     popupContent.querySelector("#deposit")?.addEventListener("click", () => {
-      if (playerCoins.length > 0) {
-        remainingCoinIds.push(...playerCoins);
-        playerCoins = [];
+      if (playerManager.getCoins().length > 0) {
+        // Move all player's coins to the cache
+        remainingCoinIds.push(...playerManager.getCoins());
+        playerManager.clearCoins();
+
+        // Update cache state and save the game
         cacheStates[`${cell.i},${cell.j}`] = createCacheState(
           cell,
           remainingCoinIds,
         );
-        saveGameData(); // Save updated state immediately
-        updateInventoryUI(playerCoins);
+        saveGameData(); // Persist the state
+        updateInventoryUI(); // Update inventory display
         console.log(
-          `Deposited coins. Cache now has: ${remainingCoinIds.length} coins`,
+          `Deposited coins. Cache now has: ${remainingCoinIds.length} coins.`,
         );
-        refreshContent();
+
+        refreshContent(); // Re-render the popup content
       }
     });
   };
 
+  // Initialize the content when the popup is first created
   refreshContent();
+
   return popupContent;
 }
 
+// Define the cached state as a string helper
 function createCacheState(cell: CacheCell, remainingCoinIds: string[]): string {
   return JSON.stringify({ i: cell.i, j: cell.j, coinIds: remainingCoinIds });
-}
-
-function saveGameData() {
-  const gameData = {
-    row: playerRow,
-    col: playerCol,
-    coins: playerCoins,
-    cacheStates: cacheStates,
-    movementPath: movementPath,
-  };
-  localStorage.setItem("gameData", JSON.stringify(gameData));
 }
 
 function updateMapView() {
@@ -268,8 +424,8 @@ function updateMapView() {
       colOffset <= NEIGHBORHOOD_SIZE;
       colOffset++
     ) {
-      const newRow = playerRow + rowOffset;
-      const newCol = playerCol + colOffset;
+      const newRow = playerManager.getRow() + rowOffset;
+      const newCol = playerManager.getCol() + colOffset;
 
       const cacheKey = `${newRow},${newCol}`;
       const gridCenter = leaflet.latLng(
@@ -301,125 +457,7 @@ function updateMapView() {
   }
 }
 
-function resetGameState() {
-  if (
-    confirm(
-      "Are you sure you want to reset your game state? This will return all coins to their home caches and erase your location history.",
-    )
-  ) {
-    // Reset player position and states
-    playerRow = Math.round(OAKES_CLASSROOM.lat / TILE_DEGREES);
-    playerCol = Math.round(OAKES_CLASSROOM.lng / TILE_DEGREES);
-    playerCoins = [];
-    cacheStates = {}; // Clear previous cache states
-    movementPath = [
-      [playerRow * TILE_DEGREES, playerCol * TILE_DEGREES],
-    ]; // Reset movement history
-
-    // Update player marker position and movement path
-    playerMarker.setLatLng(OAKES_CLASSROOM);
-    movementPolyline.setLatLngs(movementPath);
-
-    // Center map on starting location
-    map.setView(OAKES_CLASSROOM, GAMEPLAY_ZOOM_LEVEL);
-
-    updateMapView(); // Refresh the map with reset data
-    saveGameData(); // Persist reset states
-    updateInventoryUI(playerCoins);
-    console.log("Game state has been reset.");
-  }
-}
-
-function movePlayerPosition(deltaX: number, deltaY: number): [number, number] {
-  // Update game state: playerRow, playerCol
-  playerRow += deltaY;
-  playerCol += deltaX;
-  const newLatLng: [number, number] = [
-    playerRow * TILE_DEGREES,
-    playerCol * TILE_DEGREES,
-  ];
-
-  // Update movement tracking
-  movementPath.push(newLatLng);
-
-  // Return the new position so it can be used by other functions
-  return newLatLng;
-}
-
-function updateUIWithPlayerPosition(latLng: [number, number]) {
-  // Update visual representation of player on the map
-  playerMarker.setLatLng(latLng);
-
-  // Update movement polyline for visual feedback
-  movementPolyline.setLatLngs(movementPath);
-}
-
-function movePlayer(deltaX: number, deltaY: number) {
-  // Update player position and movement path
-  const newLatLng = movePlayerPosition(deltaX, deltaY);
-
-  // Update the UI with the new player position
-  updateUIWithPlayerPosition(newLatLng);
-
-  // Refresh the map and save the game state
-  updateMapView();
-  saveGameData();
-}
-
-function startGeolocationTracking() {
-  if (!navigator.geolocation) {
-    console.error("Geolocation is not supported by this browser.");
-    return;
-  }
-
-  geoWatchId = navigator.geolocation.watchPosition(
-    (position) => {
-      const coords = position.coords;
-
-      // Update player's row and column based on geolocation
-      playerRow = Math.round(coords.latitude / TILE_DEGREES);
-      playerCol = Math.round(coords.longitude / TILE_DEGREES);
-      const playerLatLng: [number, number] = [
-        coords.latitude,
-        coords.longitude,
-      ];
-
-      // Update UI elements
-      movementPath.push(playerLatLng);
-      playerMarker.setLatLng(playerLatLng);
-      movementPolyline.setLatLngs(movementPath);
-      map.setView(playerLatLng, GAMEPLAY_ZOOM_LEVEL);
-
-      // Refresh the map and save game state
-      updateMapView();
-      saveGameData();
-    },
-    handleGeolocationError,
-  );
-
-  console.log("Started geolocation tracking.");
-}
-
-function stopGeolocationTracking() {
-  if (geoWatchId !== null) {
-    navigator.geolocation.clearWatch(geoWatchId);
-    geoWatchId = null;
-    console.log("Stopped geolocation tracking.");
-  }
-}
-
-function handleGeolocationError(error: GeolocationPositionError) {
-  console.error("Geolocation error:", error);
-}
-
-function toggleGeolocation() {
-  if (geoWatchId !== null) {
-    stopGeolocationTracking();
-  } else {
-    startGeolocationTracking();
-  }
-}
-
+// Attach event listeners
 document
   .getElementById("north")
   ?.addEventListener("click", () => movePlayer(0, 1));
@@ -434,12 +472,8 @@ document
   ?.addEventListener("click", () => movePlayer(-1, 0));
 
 document.getElementById("reset")?.addEventListener("click", resetGameState);
+document.getElementById("sensor")?.addEventListener("click", toggleGeolocation);
 
-// Enable geolocation tracking when the 🌐 button is clicked
-document
-  .getElementById("sensor")
-  ?.addEventListener("click", toggleGeolocation);
-
-// Initialize the map view and inventory UI on load
+// Initialize the map and inventory
 updateMapView();
-updateInventoryUI(playerCoins);
+updateInventoryUI();
